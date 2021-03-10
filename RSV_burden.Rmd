@@ -43,67 +43,67 @@ for(k in 1:n.group){
   
   for (p in 1:n.year) { 
     # epi-year effects
-    epi[p,j,k,n] ~ dnorm(0, taud) # random slope
+    epi[p,j,k,n] ~ dnorm(0, tau1) # random slope
 
     # coefficient of influenza-associated respiratory hospitalization
     # this coefficient varies annually
     rd1[p,j,k,n] <- exp(beta1[p,j,k,n]) # ensure positive coefs
-    beta1[p,j,k,n] ~ dnorm(mu1,tau1)
+    beta1[p,j,k,n] <- gamma_flu[k]+ omega_flu[j]+ zeta_flu[n]+ xi_flu[p]+ eta_flu.grp[p,j,k,n] 
+    eta_flu.grp[p,j,k,n] ~ dnorm(eta_flu,tau.flu)
     }
   
     # coefficient of RSV-associated respiratory hospitalization
     # this coefficient depends on urbanisity, age and the belonging state
     rd2[j,k,n] <- exp(beta2[j,k,n]) # ensure positive
-    beta2[j,k,n] <- gamma[k]+omega[j]+zeta[n]+ eta
+    beta2[j,k,n] <- gamma[k]+omega[j]+zeta[n]+ eta.grp[j,k,n]
+    eta.grp[j,k,n] ~ dnorm(eta,tau.rsv)
   
   
   # Month dummy variable, account for other pathogens and general seasonality 
   for (m in 1:12){
     delta[m,j,k,n] ~ dnorm(epsilon[m,j,k,n],disp.m)
-    epsilon[m,j,k,n] <-  gamma_e[k]+ omega_e[j] + me[m]+zeta_e[n]+eta_e 
+    epsilon[m,j,k,n] <- me[m]
 }}}}
 
 
-## hypopriors
+## hyperpriors
 
 for(n in 1:n.state){
-zeta[n] ~ dnorm(mu2, tau2)
-zeta_e[n] ~ dnorm(mu3, tau3)}
+zeta[n] ~ dnorm(0, tau2)
+zeta_flu[n] ~ dnorm(0, tau3)}
 
 for(i in 1:n.group){
-gamma_e[i] ~ dnorm(mu4, tau4)
-gamma[i] ~ dnorm(mu5, tau5)
+gamma_flu[i] ~ dnorm(0, tau4)
+gamma[i] ~ dnorm(0, tau5)
 }
 
 for(i in 1:n.age){
-omega[i] ~ dnorm(mu6, tau6)
-omega_e[i] ~ dnorm(mu7,tau7)
+omega[i] ~ dnorm(0, tau6)
+omega_flu[i] ~ dnorm(0,tau7)
 }
 
 for(m in 1:12){
-  me[m] ~ dnorm(mu8, tau8)
+  me[m] ~ dnorm(0, tau8)
+}
+
+for (p in 1:n.year) { 
+xi_flu[p] ~ dnorm(0, tau9)
 }
   eta ~ dnorm(0, 0.0001)
-  eta_e ~ dnorm(0, 0.0001)
+  eta_flu ~ dnorm(0, 0.0001)
   mu0 ~ dnorm(0,0.0001)
   tau0 ~ dgamma(0.01, 0.01)
-  mu3 ~ dnorm(0,0.0001)
-  tau3 ~ dgamma(0.01, 0.01)
-  mu4 ~ dnorm(0,0.0001)
-  tau4 ~ dgamma(0.01, 0.01)
-  mu1 ~ dnorm(0,0.0001)
-  mu2 ~ dnorm(0,0.0001)
   tau1 ~ dgamma(0.01, 0.01)
   tau2 ~ dgamma(0.01, 0.01)
-  mu5 ~ dnorm(0,0.0001)
+  tau3 ~ dgamma(0.01, 0.01)
+  tau4 ~ dgamma(0.01, 0.01)
   tau5 ~ dgamma(0.01, 0.01)
-  mu6 ~ dnorm(0,0.0001)
   tau6 ~ dgamma(0.01, 0.01)
-  mu7 ~ dnorm(0,0.0001)
   tau7 ~ dgamma(0.01, 0.01)
-  mu8 ~ dnorm(0,0.0001)
   tau8 ~ dgamma(0.01, 0.01)
-  taud ~ dgamma(0.01, 0.01)
+  tau9 ~ dgamma(0.01, 0.01)
+  tau.flu ~ dgamma(0.01, 0.01)
+  tau.rsv ~ dgamma(0.01, 0.01)
   disp.m ~ dgamma(0.01, 0.01)
 }
 "
@@ -112,6 +112,8 @@ for(m in 1:12){
 
 ## Posterior sampling
 ```{r}
+epi.year <- as.factor(rep(1:9, each=12))
+month <- rep(1:12,9)
 
 dataset <- list('y' = y, "rsv"=rsv,"flu"=flu, 'epi.year'=epi.year,"month"=month,n.age=9,n.date=108,n.year=9,"n.group"=3,n.state=3)
 
@@ -122,7 +124,7 @@ jags_post <- jags.model(textConnection(model_string), data = dataset,
          n.iter=5000)
 
 
-  rsv_resp <- coda.samples(jags_post, variable.names=c("rd2","lambda","rd1","phi" "rd0","epi","delta"),
+  rsv_resp <- coda.samples(jags_post, variable.names=c("rd2","lambda","rd1","phi", "rd0","epi","delta"),
                       thin = 10,n.iter = 10000)
 ```
 
@@ -189,4 +191,3 @@ for (j in 1:9) {
     resp_wa[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+5832):((j-1)*108+(k-1)*108*9+108+5832)]))
   }}
 ```
-
