@@ -82,11 +82,11 @@ omega_flu[i] ~ dnorm(0,tau3)
 }
 
 for(m in 1:12){
-  me[m] ~ dnorm(0, 0.0001)
+  me[m] ~ dnorm(0, tau4)
 }
 
 for (p in 1:n.year) { 
-xi_flu[p] ~ dnorm(0,0.0001)
+xi_flu[p] ~ dnorm(0,tau5)
 }
   eta ~ dnorm(0, 0.0001)
   eta_flu ~ dnorm(0, 0.0001)
@@ -95,6 +95,8 @@ xi_flu[p] ~ dnorm(0,0.0001)
   tau1 ~ dgamma(0.01, 0.01)
   tau2 ~ dgamma(0.01, 0.01)
   tau3 ~ dgamma(0.01, 0.01)
+  tau4 ~ dgamma(0.01, 0.01)
+  tau5 ~ dgamma(0.01, 0.01)
   tau.flu ~ dgamma(0.01, 0.01)
   tau.rsv ~ dgamma(0.01, 0.01)
   disp.m ~ dgamma(0.01, 0.01)
@@ -120,7 +122,9 @@ jags_post <- jags.model(textConnection(model_string), data = dataset,
   rsv_resp <- coda.samples(jags_post, variable.names=c("rd2","lambda","rd1","phi", "rd0","epi","delta"),
                       thin = 10,n.iter = 10000)
   
-  gelman.diag(rsv_resp[])
+  gelman.diag(rsv_resp[,1])
+  gelman.diag(rsv_resp[,2])
+  gelman.diag(rsv_resp[,15800])
 ```
 
 ## Calculate RSV attributable respiratory hospitalization incidence and percent
