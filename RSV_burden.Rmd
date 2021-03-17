@@ -48,15 +48,16 @@ for(k in 1:n.group){
     # coefficient of influenza-associated respiratory hospitalization
     # this coefficient varies annually
     rd1[p,j,k,n] <- exp(beta1[p,j,k,n]) # ensure positive coefs
-    beta1[p,j,k,n] <- gamma_flu[k]+ omega_flu[j]+ zeta_flu[n]+ xi_flu[p]+ eta_flu.grp[p,j,k,n] 
-    eta_flu.grp[p,j,k,n] ~ dnorm(eta_flu,tau.flu)
+    beta1[p,j,k,n] ~ dnorm(beta1_mean[p,j,k,n], tau.flu)
+    beta1_mean[p,j,k,n] <- gamma_flu[k]+ omega_flu[j]+ zeta_flu[n]+ xi_flu[p]
     }
   
     # coefficient of RSV-associated respiratory hospitalization
     # this coefficient depends on urbanisity, age and the belonging state
     rd2[j,k,n] <- exp(beta2[j,k,n]) # ensure positive
-    beta2[j,k,n] <- gamma[k]+omega[j]+zeta[n]+ eta.grp[j,k,n]
-    eta.grp[j,k,n] ~ dnorm(eta,tau.rsv)
+    beta2[j,k,n] ~ dnorm(beta2_mean[j,k,n], tau.rsv)
+    beta2_mean <- gamma[k]+omega[j]+zeta[n]
+     
   
   
   # Month dummy variable, account for other pathogens and general seasonality 
