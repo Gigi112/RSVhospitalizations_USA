@@ -32,8 +32,8 @@ for(k in 1:n.group){
 
   y[i,j,k,n] ~ dpois(lambda[i,j,k,n])  ## likelihood 
 
-  phi[i,j,k,n] ~ dnorm(0,inv_var[i,j,k,n])
-  inv_var[i,j,k,n] ~ dgamma(0.01,0.01)
+  phi[i,j,k,n] ~ dnorm(0,inv_var)
+  inv_var ~ dgamma(0.01,0.01)
 
 }
 
