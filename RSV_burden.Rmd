@@ -43,7 +43,8 @@ for(k in 1:n.group){
   
   for (p in 1:n.year) { 
     # epi-year effects
-    epi[p,j,k,n] ~ dnorm(0, tau1) # random slope
+    epi[p,j,k,n] ~ dnorm(epi_mean[p,j,k,n], tau1) # random slope
+    epi_mean[p,j,k,n]<- xi_epi[p]*(gamma_epi[k]+ omega_epi[j]+ zeta_epi[n])
 
     # coefficient of influenza-associated respiratory hospitalization
     # this coefficient varies annually
@@ -69,25 +70,30 @@ for(k in 1:n.group){
 ## hyperpriors
 
 for(n in 1:n.state){
-zeta[n] ~ dnorm(0,0.0001)
-zeta_flu[n] ~ dnorm(0,0.0001)}
-
-for(i in 1:n.group){
-gamma_flu[i] ~ dnorm(0,0.0001)
-gamma[i] ~ dnorm(0, 0.0001)
+zeta[n] ~ dnorm(0,tau1)
+zeta_flu[n] ~ dnorm(0,tau2)
+zeta_epi[n] ~ dnorm(0,tau3)
 }
 
-for(i in 1:n.age){
-omega[i] ~ dnorm(0, tau2)
-omega_flu[i] ~ dnorm(0,tau3)
+for(k in 1:n.group){
+gamma_flu[k] ~ dnorm(0,tau4)
+gamma[k] ~ dnorm(0, tau5)
+gamma_epi[k] ~ dnorm(0,tau6)
+}
+
+for(j in 1:n.age){
+omega[j] ~ dnorm(0, tau7)
+omega_flu[j] ~ dnorm(0,tau8)
+omega_epi[j] ~ dnorm(0,tau9)
 }
 
 for(m in 1:12){
-  me[m] ~ dnorm(0, tau4)
+  me[m] ~ dnorm(0, tau10)
 }
 
 for (p in 1:n.year) { 
-xi_flu[p] ~ dnorm(0,tau5)
+xi_flu[p] ~ dnorm(0,tau11)
+xi_epi[p] ~ dnorm(0,tau12)
 }
   eta ~ dnorm(0, 0.0001)
   eta_flu ~ dnorm(0, 0.0001)
@@ -98,6 +104,13 @@ xi_flu[p] ~ dnorm(0,tau5)
   tau3 ~ dgamma(0.01, 0.01)
   tau4 ~ dgamma(0.01, 0.01)
   tau5 ~ dgamma(0.01, 0.01)
+  tau6 ~ dgamma(0.01, 0.01)
+  tau7 ~ dgamma(0.01, 0.01)
+  tau8 ~ dgamma(0.01, 0.01)
+  tau9 ~ dgamma(0.01, 0.01)
+  tau10 ~ dgamma(0.01, 0.01)
+  tau11 ~ dgamma(0.01, 0.01)
+  tau12 ~ dgamma(0.01, 0.01)
   tau.flu ~ dgamma(0.01, 0.01)
   tau.rsv ~ dgamma(0.01, 0.01)
   disp.m ~ dgamma(0.01, 0.01)
@@ -124,8 +137,8 @@ jags_post <- jags.model(textConnection(model_string), data = dataset,
                       thin = 10,n.iter = 10000)
   
   gelman.diag(rsv_resp[,1])
-  gelman.diag(rsv_resp[,2])
-  gelman.diag(rsv_resp[,15800])
+  gelman.diag(rsv_resp[,1000])
+  gelman.diag(rsv_resp[,19800])
 ```
 
 ## Calculate RSV attributable respiratory hospitalization incidence and percent
