@@ -13,37 +13,29 @@ library(rjags)
 
 ## Time-series model structure
 ```{r}
-library(rjags)
-
 model_string<-"
 model {
-
 for(k in 1:n.group){  
   for (j in 1:n.age){
     for(n in 1:n.state){
       for (i in 1:n.date) { 
     
    lambda[i,j,k,n] <-   rd0[j,k,n]+
-               epi[epi.year[i],j,k,n] +
-               delta[month[i],j,k,n] +
+               epi[epi.year[i],n] +
+               delta[month[i],n] +
                rsv[i,j,k,n]*rd2[j,k,n] + 
                flu[i,j,k,n]*rd1[epi.year[i],j,k,n]+
                phi[i,j,k,n]
-
   y[i,j,k,n] ~ dpois(lambda[i,j,k,n])  ## likelihood 
-
   phi[i,j,k,n] ~ dnorm(0,inv_var)
-
 }
-
   # baseline hospitalizations (must be greater than or equal to 0)
   rd0[j,k,n] <- exp(beta0[j,k,n])
   beta0[j,k,n]~ dnorm(mu0,tau0)
   
   for (p in 1:n.year) { 
     # epi-year effects
-    epi[p,j,k,n] ~ dnorm(xi_epi[p], tau.epi) # random slope
-
+    # random slope
     # coefficient of influenza-associated respiratory hospitalization
     # this coefficient varies annually
     rd1[p,j,k,n] <- exp(beta1[p,j,k,n]) # ensure positive coefs
@@ -59,35 +51,32 @@ for(k in 1:n.group){
     
   
   # Month dummy variable, account for other pathogens and general seasonality 
-  for (m in 1:12){
-    delta[m,j,k,n] ~ dnorm(me,disp.m)
-}}}}
-
-
+}}}
 ## hyperpriors
-
 for(n in 1:n.state){
 zeta[n] ~ dnorm(0,tau1)
 zeta_flu[n] ~ dnorm(0,tau2)
+for (p in 1:n.year) { 
+epi[p,n] ~ dnorm(xi_epi[p], tau.epi) }
+  for (m in 1:12){
+    delta[m,n] ~ dnorm(me,disp.m)
 }
-
+}
 for(k in 1:n.group){
 gamma_flu[k] ~ dnorm(0,tau3)
 gamma[k] ~ dnorm(0, tau4)
 }
-
 for(j in 1:n.age){
 omega[j] ~ dnorm(0, tau5)
 omega_flu[j] ~ dnorm(0,tau6)
 }
-
 for (p in 1:n.year) { 
 xi_flu[p] ~ dnorm(0,tau7)
 xi_epi[p] ~ dnorm(0,tau8)
 }
   inv_var ~ dgamma(0.01,0.01)
   mu0 ~ dnorm(0,0.0001)
-  me ~ dnorm(0, 0.001)
+  me ~ dnorm(0, 0.0001)
   tau0 ~ dgamma(0.01, 0.01)
   tau1 ~ dgamma(0.01, 0.01)
   tau2 ~ dgamma(0.01, 0.01)
@@ -114,14 +103,14 @@ month <- rep(1:12,9)
 dataset <- list('y' = y, "rsv"=rsv,"flu"=flu, 'epi.year'=epi.year,"month"=month,n.age=9,n.date=108,n.year=9,"n.group"=3,n.state=3)
 
 jags_post <- jags.model(textConnection(model_string), data = dataset,
-                    n.chains = 2)
+                    n.chains = 3)
 
  update(jags_post, 
-         n.iter=50000)
+         n.iter=75000)
 
 
   rsv_resp <- coda.samples(jags_post, variable.names=c("rd2","lambda","rd1","phi", "rd0","epi","delta"),
-                      thin = 20,n.iter = 40000)
+                      thin = 20,n.iter = 60000)
   
   gelman.diag(rsv_resp[,1])
   gelman.diag(rsv_resp[,200])
@@ -143,79 +132,70 @@ jags_post <- jags.model(textConnection(model_string), data = dataset,
 
 ## Calculate RSV attributable respiratory hospitalization incidence and percent
 ```{r}
-  post <- as.data.frame(as.matrix(rsv_resp))
+post1 <- as.data.frame(as.matrix(rsv_resp[[1]][-c(1:1750),]))
+  post2 <- as.data.frame(as.matrix(rsv_resp[[2]][-c(1:1750),]))
+  post3 <- as.data.frame(as.matrix(rsv_resp[[3]][-c(1:1750),]))
+  post <- bind_rows(post1,post2,post3)
   lambda <- post[, grep("lambda", colnames(post), fixed=T)]
   rd2.resp <- post[, grep("rd2[", colnames(post), fixed=T)]
   
-  rsv_count_nj <- array(data = NA,dim = c(4000,108,9,3))
+  rsv_count_nj <- array(data = NA,dim = c(3750,108,9,3))
 for (i in 1:108) {
   for (j in 1:9) {
     for (k in 1:3) {
       rsv_count_nj[,i,j,k] <- rsv[i,j,k,1]*rd2.resp[,j+9*(k-1)]
     }}}
 
-rsv_count_ny <- array(data = NA,dim = c(4000,108,9,3))
+rsv_count_ny <- array(data = NA,dim = c(3750,108,9,3))
 for (i in 1:108) {
   for (j in 1:9) {
     for (k in 1:3) {
-      rsv_count_ny[,i,j,k] <- rsv[i,j,k,2]*rd2.resp_2[,j+9*(k-1)+27]
+      rsv_count_ny[,i,j,k] <- rsv[i,j,k,2]*rd2.resp[,j+9*(k-1)+27]
     }}}
 
-rsv_count_wa <- array(data = NA,dim = c(4000,108,9,3))
+rsv_count_wa <- array(data = NA,dim = c(3750,108,9,3))
 for (i in 1:108) {
   for (j in 1:9) {
     for (k in 1:3) {
       rsv_count_wa[,i,j,k] <- rsv[i,j,k,3]*rd2.resp[,j+9*(k-1)+54]
     }}}
 
-  rsv_count_nj_age <- array(data = NA,dim = c(4000,9,3))
-  for (i in 1:4000) {    
+  rsv_count_nj_age <- array(data = NA,dim = c(3750,9,3))
+  for (i in 1:3750) {    
     for (j in 1:9) {
       for (k in 1:3) {
        rsv_count_nj_age[i,j,k] <- sum(rsv_count_nj[i,,j,k])}}}
   
-  rsv_count_ny_age <- array(data = NA,dim = c(4000,9,3))
-      for (i in 1:4000) {
+  rsv_count_ny_age <- array(data = NA,dim = c(3750,9,3))
+      for (i in 1:3750) {
       for (j in 1:9) {
       for (k in 1:3) {
        rsv_count_ny_age[i,j,k] <- sum(rsv_count_ny[i,,j,k])}}}
+  
+  rsv_count_wa_age <- array(data = NA,dim = c(3750,9,3))
+      for (i in 1:3750) {
+      for (j in 1:9) {
+      for (k in 1:3) {
+       rsv_count_wa_age[i,j,k] <- sum(rsv_count_wa[i,,j,k])}}}
 
-
-rsv_percent_nj <- array(data = NA,dim = c(4000,9,3))
+rsv_percent_nj <- array(data = NA,dim = c(3750,9,3))
 for (j in 1:9) {
   for (k in 1:3) {
     rsv_percent_nj[,j,k] <- as.numeric(rowSums(rsv_count_nj[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1):((j-1)*108+(k-1)*108*9+108)]))
   }}
 
-rsv_percent_ny <- array(data = NA,dim = c(4000,9,3))
+rsv_percent_ny <- array(data = NA,dim = c(3750,9,3))
 for (j in 1:9) {
   for (k in 1:3) {
     rsv_percent_ny[,j,k] <- as.numeric(rowSums(rsv_count_ny[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+2916):((j-1)*108+(k-1)*108*9+108+2916)]))
   }}
 
-rsv_percent_wa <- array(data = NA,dim = c(4000,9,3))
+rsv_percent_wa <- array(data = NA,dim = c(3750,9,3))
 for (j in 1:9) {
   for (k in 1:3) {
     rsv_percent_wa[,j,k] <- as.numeric(rowSums(rsv_count_wa[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+5832):((j-1)*108+(k-1)*108*9+108+5832)]))
   }}
 
-resp_nj <- array(data = NA,dim = c(4000,9,3))
-for (j in 1:9) {
-  for (k in 1:3) {
-    resp_nj[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1):((j-1)*108+(k-1)*108*9+108)]))
-  }}
-
-resp_ny <- array(data = NA,dim = c(4000,9,3))
-for (j in 1:9) {
-  for (k in 1:3) {
-    resp_ny[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+2916):((j-1)*108+(k-1)*108*9+108+2916)]))
-  }}
-
-resp_wa <- array(data = NA,dim = c(4000,9,3))
-for (j in 1:9) {
-  for (k in 1:3) {
-    resp_wa[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+5832):((j-1)*108+(k-1)*108*9+108+5832)]))
-  }}
 ```
 
 ```{r}
