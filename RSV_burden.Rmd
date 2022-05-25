@@ -24,10 +24,10 @@ for(k in 1:n.group){
                epi[epi.year[i],n] +
                delta[month[i],n] +
                rsv[i,j,k,n]*rd2[j,k,n] + 
-               flu[i,j,k,n]*rd1[epi.year[i],j,k,n]+
-               phi[i,j,k,n]
-  y[i,j,k,n] ~ dpois(lambda[i,j,k,n])  ## likelihood 
-  phi[i,j,k,n] ~ dnorm(0,inv_var)
+               flu[i,j,k,n]*rd1[epi.year[i],j,k,n]
+
+  y[i,j,k,n] ~ dnegbin(prob[i,j,k,n],r)
+  prob[i,j,k,n]<- r/(r+lambda[i,j,k,n])  ## likelihood 
 }
   # baseline hospitalizations (must be greater than or equal to 0)
   rd0[j,k,n] <- exp(beta0[j,k,n])
@@ -40,14 +40,14 @@ for(k in 1:n.group){
     # this coefficient varies annually
     rd1[p,j,k,n] <- exp(beta1[p,j,k,n]) # ensure positive coefs
     beta1[p,j,k,n] ~ dnorm(beta1_mean[p,j,k,n],tau.flu)
-    beta1_mean[p,j,k,n] <- gamma_flu[k]+ omega_flu[j]+ zeta_flu[n]+ xi_flu[p]
+    beta1_mean[p,j,k,n] <- mu1+gamma_flu[k]+ omega_flu[j]+ zeta_flu[n]+ xi_flu[p]
     }
   
     # coefficient of RSV-associated respiratory hospitalization
     # this coefficient depends on urbanisity, age and the belonging state
     rd2[j,k,n] <- exp(beta2[j,k,n]) # ensure positive
     beta2[j,k,n] ~ dnorm(beta2_mean[j,k,n],tau.rsv)
-    beta2_mean[j,k,n]<- gamma[k]+omega[j]+zeta[n]
+    beta2_mean[j,k,n]<- mu2+gamma[k]+omega[j]+zeta[n]
     
   
   # Month dummy variable, account for other pathogens and general seasonality 
@@ -57,9 +57,9 @@ for(n in 1:n.state){
 zeta[n] ~ dnorm(0,tau1)
 zeta_flu[n] ~ dnorm(0,tau2)
 for (p in 1:n.year) { 
-epi[p,n] ~ dnorm(xi_epi[p], tau.epi) }
+epi[p,n] ~ dnorm(0, tau.epi) }
   for (m in 1:12){
-    delta[m,n] ~ dnorm(me,disp.m)
+    delta[m,n] ~ dnorm(0,disp.m)
 }
 }
 for(k in 1:n.group){
@@ -74,8 +74,10 @@ for (p in 1:n.year) {
 xi_flu[p] ~ dnorm(0,tau7)
 xi_epi[p] ~ dnorm(0,tau8)
 }
-  inv_var ~ dgamma(0.01,0.01)
+  r ~ dunif(0,250)
   mu0 ~ dnorm(0,0.0001)
+  mu1 ~ dnorm(0,0.0001)
+  mu2 ~ dnorm(0,0.0001)
   me ~ dnorm(0, 0.0001)
   tau0 ~ dgamma(0.01, 0.01)
   tau1 ~ dgamma(0.01, 0.01)
@@ -94,45 +96,198 @@ xi_epi[p] ~ dnorm(0,tau8)
 "
 ```
 
+```{r}
+model_string<-"
+model {
+for(k in 1:n.group){  
+  for (j in 1:n.age){
+      for (i in 1:n.date) { 
+    
+   lambda[i,j,k] <-   rd0[j,k]+
+               exp(epi[epi.year[i]]) +
+               exp(delta[month[i]]) +
+               rsv[i,j,k]*rd2[j,k] + 
+               flu[i,j,k]*rd1[epi.year[i],j,k]
 
+  y[i,j,k] ~ dnegbin(prob[i,j,k],r)
+  prob[i,j,k]<- r/(r+lambda[i,j,k])  ## likelihood 
+}
+  # baseline hospitalizations (must be greater than or equal to 0)
+  rd0[j,k] <- exp(beta0[j,k])
+  beta0[j,k]~ dnorm(mu0,tau0)
+  
+  for (p in 1:n.year) { 
+    # epi-year effects
+    # random slope
+    # coefficient of influenza-associated respiratory hospitalization
+    # this coefficient varies annually
+    rd1[p,j,k] <- exp(beta1[p,j,k]) # ensure positive coefs
+    beta1[p,j,k] ~ dnorm(beta1_mean[p,j,k],tau.flu)
+    beta1_mean[p,j,k] <- gamma_flu[k]+ omega_flu[j]+ xi_flu[p]
+    }
+  
+    # coefficient of RSV-associated respiratory hospitalization
+    # this coefficient depends on urbanisity, age and the belonging state
+    rd2[j,k] <- exp(beta2[j,k]) # ensure positive
+    beta2[j,k] ~ dnorm(beta2_mean[j,k],tau.rsv)
+    beta2_mean[j,k]<- gamma[k]+omega[j]
+    
+  
+  # Month dummy variable, account for other pathogens and general seasonality 
+}}
+## hyperpriors
+for (p in 1:n.year) { 
+epi[p] ~ dnorm(0, tau.epi) }
+  for (m in 1:12){
+    delta[m] ~ dnorm(0,disp.m)
+}
+
+for(k in 1:n.group){
+gamma_flu[k] ~ dnorm(0,tau3)
+gamma[k] ~ dnorm(0, tau4)
+}
+for(j in 1:n.age){
+omega[j] ~ dnorm(0, tau5)
+omega_flu[j] ~ dnorm(0,tau6)
+}
+for (p in 1:n.year) { 
+xi_flu[p] ~ dnorm(0,tau7)
+}
+  r ~ dunif(0,250)
+  mu0 ~ dnorm(0,0.0001)
+  tau0 ~ dgamma(0.01, 0.01)
+  tau1 ~ dgamma(0.01, 0.01)
+  tau2 ~ dgamma(0.01, 0.01)
+  tau3 ~ dgamma(0.01, 0.01)
+  tau4 ~ dgamma(0.01, 0.01)
+  tau5 ~ dgamma(0.01, 0.01)
+  tau6 ~ dgamma(0.01, 0.01)
+  tau7 ~ dgamma(0.01, 0.01)
+  tau8 ~ dgamma(0.01, 0.01)
+  tau.epi ~ dgamma(0.01, 0.01)
+  tau.flu ~ dgamma(0.01, 0.01)
+  tau.rsv ~ dgamma(0.01, 0.01)
+  disp.m ~ dgamma(0.01, 0.01)
+}
+"
+
+```
+
+```{r}
+model_string<-"
+model {
+for(k in 1:n.group){  
+  for (j in 1:n.age){
+      for (i in 1:n.date) { 
+    
+   lambda[i,j,k] <-   rd0[j,k]+
+               exp(epi[epi.year[i]]) +
+               delta1*i +
+               delta2*i^2 +
+               delta3*i^3 +
+               rsv[i,j,k]*rd2[j,k] + 
+               flu[i,j,k]*rd1[epi.year[i],j,k]
+
+  y[i,j,k] ~ dnegbin(prob[i,j,k],r)
+  prob[i,j,k]<- r/(r+lambda[i,j,k])  ## likelihood 
+}
+  # baseline hospitalizations (must be greater than or equal to 0)
+  rd0[j,k] <- exp(beta0[j,k])
+  beta0[j,k]~ dnorm(mu0,tau0)
+  
+  for (p in 1:n.year) { 
+    # epi-year effects
+    # random slope
+    # coefficient of influenza-associated respiratory hospitalization
+    # this coefficient varies annually
+    rd1[p,j,k] <- exp(beta1[p,j,k]) # ensure positive coefs
+    beta1[p,j,k] ~ dnorm(beta1_mean[p,j,k],tau.flu)
+    beta1_mean[p,j,k] <- gamma_flu[k]+ omega_flu[j]+ xi_flu[p]
+    }
+  
+    # coefficient of RSV-associated respiratory hospitalization
+    # this coefficient depends on urbanisity, age and the belonging state
+    rd2[j,k] <- exp(beta2[j,k]) # ensure positive
+    beta2[j,k] ~ dnorm(beta2_mean[j,k],tau.rsv)
+    beta2_mean[j,k]<- gamma[k]+omega[j]
+    
+  
+  # Month dummy variable, account for other pathogens and general seasonality 
+}}
+## hyperpriors
+for (p in 1:n.year) { 
+epi[p] ~ dnorm(0, tau.epi) }
+
+delta1 ~ dnorm(0,0.0001)
+delta2 ~ dnorm(0,0.0001)
+delta3 ~ dnorm(0,0.0001)
+
+for(k in 1:n.group){
+gamma_flu[k] ~ dnorm(0,tau3)
+gamma[k] ~ dnorm(0, tau4)
+}
+for(j in 1:n.age){
+omega[j] ~ dnorm(0, tau5)
+omega_flu[j] ~ dnorm(0,tau6)
+}
+for (p in 1:n.year) { 
+xi_flu[p] ~ dnorm(0,tau7)
+}
+  r ~ dunif(0,250)
+  mu0 ~ dnorm(0,0.0001)
+  tau0 ~ dgamma(0.01, 0.01)
+  tau1 ~ dgamma(0.01, 0.01)
+  tau2 ~ dgamma(0.01, 0.01)
+  tau3 ~ dgamma(0.01, 0.01)
+  tau4 ~ dgamma(0.01, 0.01)
+  tau5 ~ dgamma(0.01, 0.01)
+  tau6 ~ dgamma(0.01, 0.01)
+  tau7 ~ dgamma(0.01, 0.01)
+  tau8 ~ dgamma(0.01, 0.01)
+  tau.epi ~ dgamma(0.01, 0.01)
+  tau.flu ~ dgamma(0.01, 0.01)
+  tau.rsv ~ dgamma(0.01, 0.01)
+  disp.m ~ dgamma(0.01, 0.01)
+}
+"
+
+```
 ## Posterior sampling
 ```{r}
 epi.year <- as.factor(rep(1:9, each=12))
 month <- rep(1:12,9)
 
-dataset <- list('y' = y, "rsv"=rsv,"flu"=flu, 'epi.year'=epi.year,"month"=month,n.age=9,n.date=108,n.year=9,"n.group"=3,n.state=3)
+dataset <- list('y' = y_income_whole, "rsv"=rsv_income_whole,"flu"=flu_income_whole, 'epi.year'=epi.year,"month"=month,n.age=9,n.date=108,n.year=9,"n.group"=3,pi=pi)
 
 jags_post <- jags.model(textConnection(model_string), data = dataset,
                     n.chains = 3)
 
  update(jags_post, 
-         n.iter=75000)
+         n.iter=65000)
 
+dic.samples(jags_post,30000,10)
 
-  rsv_resp <- coda.samples(jags_post, variable.names=c("rd2","lambda","rd1","phi", "rd0","epi","delta"),
-                      thin = 20,n.iter = 60000)
+  rsv_resp <- coda.samples(jags_post, variable.names=c("rd2","lambda","rd1", "rd0","epi","delta"),
+                      thin = 10,n.iter = 30000)
   
   gelman.diag(rsv_resp[,1])
+  gelman.diag(rsv_resp[,15])
+  gelman.diag(rsv_resp[,100])
   gelman.diag(rsv_resp[,200])
+  gelman.diag(rsv_resp[,300])
+  gelman.diag(rsv_resp[,600])
+  gelman.diag(rsv_resp[,800])
   gelman.diag(rsv_resp[,500])
   gelman.diag(rsv_resp[,700])
   gelman.diag(rsv_resp[,1000])
   gelman.diag(rsv_resp[,1800])
   gelman.diag(rsv_resp[,2800])
-  gelman.diag(rsv_resp[,3800])
-  gelman.diag(rsv_resp[,5800])
-  gelman.diag(rsv_resp[,7800])
-  gelman.diag(rsv_resp[,9800])
-  gelman.diag(rsv_resp[,11800])
-  gelman.diag(rsv_resp[,13800])
-  gelman.diag(rsv_resp[,15800])
-  gelman.diag(rsv_resp[,17800])
-  gelman.diag(rsv_resp[,19800])
+  gelman.diag(rsv_resp[,2900])
 ```
 
 ## Calculate RSV attributable respiratory hospitalization incidence and percent
 ```{r}
-post1 <- as.data.frame(as.matrix(rsv_resp[[1]][-c(1:1750),]))
+  post1 <- as.data.frame(as.matrix(rsv_resp[[1]][-c(1:1750),]))
   post2 <- as.data.frame(as.matrix(rsv_resp[[2]][-c(1:1750),]))
   post3 <- as.data.frame(as.matrix(rsv_resp[[3]][-c(1:1750),]))
   post <- bind_rows(post1,post2,post3)
@@ -143,21 +298,21 @@ post1 <- as.data.frame(as.matrix(rsv_resp[[1]][-c(1:1750),]))
 for (i in 1:108) {
   for (j in 1:9) {
     for (k in 1:3) {
-      rsv_count_nj[,i,j,k] <- rsv[i,j,k,1]*rd2.resp[,j+9*(k-1)]
+      rsv_count_nj[,i,j,k] <- rsv_income[i,j,k,1]*rd2.resp[,j+9*(k-1)]
     }}}
 
 rsv_count_ny <- array(data = NA,dim = c(3750,108,9,3))
 for (i in 1:108) {
   for (j in 1:9) {
     for (k in 1:3) {
-      rsv_count_ny[,i,j,k] <- rsv[i,j,k,2]*rd2.resp[,j+9*(k-1)+27]
+      rsv_count_ny[,i,j,k] <- rsv_income[i,j,k,2]*rd2.resp[,j+9*(k-1)]
     }}}
 
 rsv_count_wa <- array(data = NA,dim = c(3750,108,9,3))
 for (i in 1:108) {
   for (j in 1:9) {
     for (k in 1:3) {
-      rsv_count_wa[,i,j,k] <- rsv[i,j,k,3]*rd2.resp[,j+9*(k-1)+54]
+      rsv_count_wa[,i,j,k] <- rsv_income[i,j,k,3]*rd2.resp[,j+9*(k-1)]
     }}}
 
   rsv_count_nj_age <- array(data = NA,dim = c(3750,9,3))
@@ -187,20 +342,43 @@ for (j in 1:9) {
 rsv_percent_ny <- array(data = NA,dim = c(3750,9,3))
 for (j in 1:9) {
   for (k in 1:3) {
-    rsv_percent_ny[,j,k] <- as.numeric(rowSums(rsv_count_ny[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+2916):((j-1)*108+(k-1)*108*9+108+2916)]))
+    rsv_percent_ny[,j,k] <- as.numeric(rowSums(rsv_count_ny[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1):((j-1)*108+(k-1)*108*9+108)]))
   }}
 
 rsv_percent_wa <- array(data = NA,dim = c(3750,9,3))
 for (j in 1:9) {
   for (k in 1:3) {
-    rsv_percent_wa[,j,k] <- as.numeric(rowSums(rsv_count_wa[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+5832):((j-1)*108+(k-1)*108*9+108+5832)]))
+    rsv_percent_wa[,j,k] <- as.numeric(rowSums(rsv_count_wa[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1):((j-1)*108+(k-1)*108*9+108)]))
   }}
 
+# resp_nj <- array(data = NA,dim = c(3750,9,3))
+# for (j in 1:9) {
+#   for (k in 1:3) {
+#     resp_nj[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1):((j-1)*108+(k-1)*108*9+108)]))
+#   }}
+# 
+# resp_ny <- array(data = NA,dim = c(3750,9,3))
+# for (j in 1:9) {
+#   for (k in 1:3) {
+#     resp_ny[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+2916):((j-1)*108+(k-1)*108*9+108+2916)]))
+#   }}
+# 
+# resp_wa <- array(data = NA,dim = c(3750,9,3))
+# for (j in 1:9) {
+#   for (k in 1:3) {
+#     resp_wa[,j,k] <- as.numeric(rowSums(lambda[,((j-1)*108+(k-1)*108*9+1+5832):((j-1)*108+(k-1)*108*9+108+5832)]))
+#   }}
 ```
 
 ```{r}
-round(apply(rsv_percent_ny,c(2,3), mean)*100,1)
-round(apply(rsv_percent_ny, c(2,3), quantile , probs = 0.025)*100,1)
-round(apply(rsv_percent_ny, c(2,3), quantile , probs = 0.975)*100,1)
+round(apply(rsv_percent,c(2,3), mean)*100,1)
+round(apply(rsv_percent, c(2,3), quantile , probs = 0.025)*100,1)
+round(apply(rsv_percent, c(2,3), quantile , probs = 0.975)*100,1)
+```
+
+```{r}
+round(apply(rsv_percent_nj,c(2,3), mean)*100,1)
+round(apply(rsv_percent_nj, c(2,3), quantile , probs = 0.025)*100,1)
+round(apply(rsv_percent_nj, c(2,3), quantile , probs = 0.975)*100,1)
 ```
 
