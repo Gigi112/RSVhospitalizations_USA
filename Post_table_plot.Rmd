@@ -1,0 +1,349 @@
+---
+title: "Post_table_plot"
+author: "ZHE ZHENG"
+date: '2022-09-02'
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# load require packages
+```{r}
+library(ggplot2)
+```
+
+# get posterior samples (delete the burn-in period) and calculate respiratory hospitalizations attributable to RSV infection
+```{r}
+post1 <- as.data.frame(as.matrix(rsv_resp[[1]][-c(1:1750),]))
+  post2 <- as.data.frame(as.matrix(rsv_resp[[2]][-c(1:1750),]))
+  post3 <- as.data.frame(as.matrix(rsv_resp[[3]][-c(1:1750),]))
+  post <- bind_rows(post1,post2,post3)
+  lambda <- post[, grep("lambda", colnames(post), fixed=T)]
+  rd2.resp <- post[, grep("rd2[", colnames(post), fixed=T)]
+  
+  rsv_count <- array(data = NA,dim = c(3750,108,9,3))
+for (i in 1:108) {
+  for (j in 1:9) {
+    for (k in 1:3) {
+      rsv_count[,i,j,k] <- rsv_income_whole[i,j,k]*rd2.resp[,j+9*(k-1)]
+    }}}
+
+  rsv_count_age <- array(data = NA,dim = c(3750,9,3))
+  for (i in 1:3750) {    
+    for (j in 1:9) {
+      for (k in 1:3) {
+       rsv_count_age[i,j,k] <- sum(rsv_count[i,,j,k])}}}
+  
+  rsv_percent <- array(data = NA,dim = c(3750,9,3))
+for (j in 1:9) {
+  for (k in 1:3) {
+    rsv_percent[,j,k] <- as.numeric(rowSums(rsv_count[,,j,k])/rowSums(lambda[,((j-1)*108+(k-1)*108*9+1):((j-1)*108+(k-1)*108*9+108)]))
+  }}
+
+  round(apply(rsv_percent,c(2), mean)*100,1)
+  round(apply(rsv_percent, c(2,3), quantile , probs = 0.025)*100,1)
+  round(apply(rsv_percent, c(2,3), quantile , probs = 0.975)*100,1)
+```
+
+# get population size in each age group
+```{r}
+# read in zip code level population size of each age group
+age_pop <- readRDS("~/Library/CloudStorage/Box-Box/aim2/aim2/age_pop.rds")
+
+# seperate the zip code by tertile of income
+age_pop_1 <- age_pop[age_pop$ZIP%in%resp.group_nj[[1]]$zip|age_pop$ZIP%in%resp.group_ny[[1]]$zip|age_pop$ZIP%in%resp.group_wa[[1]]$zip,]
+age_pop_2 <- age_pop[age_pop$ZIP%in%resp.group_nj[[2]]$zip|age_pop$ZIP%in%resp.group_ny[[2]]$zip|age_pop$ZIP%in%resp.group_wa[[2]]$zip,]
+age_pop_3 <- age_pop[age_pop$ZIP%in%resp.group_nj[[3]]$zip|age_pop$ZIP%in%resp.group_ny[[3]]$zip|age_pop$ZIP%in%resp.group_wa[[3]]$zip,]
+
+# create a data frame that contains population by age (row) and by income (columns)
+age_number <- matrix(data=NA,nrow=9,ncol = 3)
+colnames(age_number) <- c("High","Medium","Low")
+rownames(age_number) <- c("<1","1","2-4","5-9","10-19","20-44","45-64","65-84","85+")
+age_number[1,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..Under.5.years)/5
+age_number[2,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..Under.5.years)/5
+age_number[3,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..Under.5.years)/5*3
+age_number[4,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..5.to.9.years)
+age_number[5,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..10.to.14.years,age_pop_1$Estimate..SEX.AND.AGE..15.to.19.years)
+age_number[6,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..20.to.24.years,age_pop_1$Estimate..SEX.AND.AGE..25.to.34.years,age_pop_1$Estimate..SEX.AND.AGE..35.to.44.years)
+age_number[7,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..45.to.54.years,age_pop_1$Estimate..SEX.AND.AGE..55.to.59.years,age_pop_1$Estimate..SEX.AND.AGE..60.to.64.years)
+age_number[8,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..65.to.74.years,
+                       age_pop_1$Estimate..SEX.AND.AGE..75.to.84.years)
+age_number[9,1] <- sum(age_pop_1$Estimate..SEX.AND.AGE..85.years.and.over)
+
+
+age_number[1,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..Under.5.years)/5
+age_number[2,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..Under.5.years)/5
+age_number[3,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..Under.5.years)/5*3
+age_number[4,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..5.to.9.years)
+age_number[5,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..10.to.14.years,age_pop_2$Estimate..SEX.AND.AGE..15.to.19.years)
+age_number[6,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..20.to.24.years,age_pop_2$Estimate..SEX.AND.AGE..25.to.34.years,age_pop_2$Estimate..SEX.AND.AGE..35.to.44.years)
+age_number[7,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..45.to.54.years,age_pop_2$Estimate..SEX.AND.AGE..55.to.59.years,age_pop_2$Estimate..SEX.AND.AGE..60.to.64.years)
+age_number[8,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..65.to.74.years,
+                       age_pop_2$Estimate..SEX.AND.AGE..75.to.84.years)
+age_number[9,2] <- sum(age_pop_2$Estimate..SEX.AND.AGE..85.years.and.over)
+
+
+
+age_number[1,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..Under.5.years)/5
+age_number[2,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..Under.5.years)/5
+age_number[3,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..Under.5.years)/5*3
+age_number[4,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..5.to.9.years)
+age_number[5,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..10.to.14.years,age_pop_3$Estimate..SEX.AND.AGE..15.to.19.years)
+age_number[6,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..20.to.24.years,age_pop_3$Estimate..SEX.AND.AGE..25.to.34.years,age_pop_3$Estimate..SEX.AND.AGE..35.to.44.years)
+age_number[7,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..45.to.54.years,age_pop_3$Estimate..SEX.AND.AGE..55.to.59.years,age_pop_3$Estimate..SEX.AND.AGE..60.to.64.years)
+age_number[8,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..65.to.74.years,
+                       age_pop_3$Estimate..SEX.AND.AGE..75.to.84.years)
+age_number[9,3] <- sum(age_pop_3$Estimate..SEX.AND.AGE..85.years.and.over)
+```
+
+# create plot 1
+```{r}
+incidence <- array(data = NA,dim = c(3750,9,3))
+  for (j in 1:9) {
+      for (k in 1:3) {
+        for (p in 1:3750) {
+   incidence[p,j,k] <- (rsv_count_age[p,j,k]/age_number[j,k])/9*100000}}}
+
+dimnames(incidence)[2] <- list(age_group=c("<1","1","2-4","5-9","10-19","20-44","45-64","65-84","85+"))
+
+  round(apply(incidence,2, mean))
+  round(apply(incidence, 2, quantile , probs = 0.025))
+  round(apply(incidence,2, quantile , probs = 0.975))
+  
+dimnames(incidence)[3] <- list(income_group=c("Low","Medium","High"))
+
+df0 <- as.data.frame.table(incidence)
+df0 <- df0[,-1]
+names(df0) <- c("age_group","income_group","RSVHosp")
+
+df2 <- df0 %>%
+  group_by(age_group,income_group) %>%
+  summarise(RSVHosp_incidence = mean(RSVHosp, na.rm = TRUE),
+            quan_0.025 = quantile(RSVHosp, 0.025,na.rm = TRUE),
+            quan_0.975 = quantile(RSVHosp, 0.975,na.rm = TRUE),
+            sd=sd(RSVHosp, na.rm = TRUE))
+df3 <- df2
+df3$RSVHosp_incidence <- signif(df3$RSVHosp_incidence,2)
+
+jpeg(file = "/Users/zhezheng/Library/CloudStorage/Box-Box/aim2/draft/revision_pneu/F1_0823.jpeg",width=2500,height=1200,res=300)   
+ggplot(df3, aes(x=age_group,y=RSVHosp_incidence,label=RSVHosp_incidence,color = income_group,group=income_group)) +
+  geom_point(aes(x=age_group,y=RSVHosp_incidence),position=position_dodge(0.6), size = 1)+
+ geom_text(position = position_dodge(width =0.7), vjust = -df2$sd/50-1, size = 3,
+              fontface = "bold", show.legend = FALSE) +
+  scale_y_continuous(breaks=seq(0, 3000, 250), limits=c(0, 3100))+
+  geom_errorbar(
+    aes(ymin = quan_0.025, ymax = quan_0.975,color = income_group),
+    position = position_dodge(0.6),width=.1
+    )+
+  scale_color_manual(values = c("#00AFBB", "#E7B800","#FC4E07"))+
+  labs(y="Estimated RSV hospitalizations\nper 100,000 people per year", x="Age group",color="Income level",size = 8)+
+  theme_classic()+
+  theme(axis.text.x = element_text(size = 8), axis.title.x = element_text(size = 10),
+        axis.text.y = element_text(size = 8), axis.title.y = element_text(size = 10),
+        legend.title = element_text(size=8),
+        legend.text = element_text(size = 8))
+dev.off()
+
+```
+
+# get reported RSV by age and income group
+```{r}
+rsv_report <- matrix(data=NA,nrow=9,ncol=3)
+rownames(rsv_report) <- c("<1","1-<2","2-<5","5-9","10-19","20-44","45-64","65-84",">85")
+
+for (i in 1:3) {
+  
+rsv_report[1,i] <- sum(resp.group_nj[[i]][agecat1==0,][,6],resp.group_ny[[i]][agecat1==0,][,6],resp.group_wa[[i]][agecat1==0,][,6])
+
+rsv_report[2,i] <- sum(resp.group_nj[[i]][agecat1==1,][,6],resp.group_ny[[i]][agecat1==1,][,6],resp.group_wa[[i]][agecat1==1,][,6])
+
+rsv_report[3,i]<- sum(resp.group_nj[[i]][1<agecat1&agecat1<5,][,6],resp.group_ny[[i]][1<agecat1&agecat1<5,][,6],resp.group_wa[[i]][1<agecat1&agecat1<5,][,6])
+
+rsv_report[4,i] <- sum(resp.group_nj[[i]][agecat1==5,][,6],resp.group_ny[[i]][agecat1==5,][,6],resp.group_wa[[i]][agecat1==5,][,6])
+
+rsv_report[5,i] <- sum(resp.group_nj[[i]][5<agecat1&agecat1<8,][,6],resp.group_ny[[i]][5<agecat1&agecat1<8,][,6],resp.group_wa[[i]][5<agecat1&agecat1<8,][,6])
+
+rsv_report[6,i]<- sum(resp.group_nj[[i]][7<agecat1&agecat1<13,][,6],resp.group_ny[[i]][7<agecat1&agecat1<13,][,6],resp.group_wa[[i]][7<agecat1&agecat1<13,][,6])
+
+rsv_report[7,i] <- sum(resp.group_nj[[i]][12<agecat1&agecat1<17,][,6],resp.group_ny[[i]][12<agecat1&agecat1<17,][,6],resp.group_wa[[i]][12<agecat1&agecat1<17,][,6])
+
+rsv_report[8,i] <- sum(resp.group_nj[[i]][17<=agecat1&agecat1<=20,][,6],resp.group_ny[[i]][17<=agecat1&agecat1<=20,][,6],resp.group_wa[[i]][17<=agecat1&agecat1<=20,][,6])
+
+rsv_report[9,i] <- sum(resp.group_nj[[i]][21<=agecat1,][,6],resp.group_ny[[i]][21<=agecat1,][,6],resp.group_wa[[i]][21<=agecat1,][,6])
+
+print(i)
+}
+
+```
+
+# create figure 2. The reporting ratio of RSV hospitalizations across age and income groups
+```{r}
+# calculate the report ratio across all posterior samples
+# need to divide first and then calculate the interval
+rsv_ratio <- array(data = NA,dim = c(3750,9,3))
+  for (j in 1:9) {
+      for (k in 1:3) {
+        for (p in 1:3750) {
+   rsv_ratio[p,j,k] <- rsv_report[j,k]/rsv_count_age[p,j,k]}}}
+
+dimnames(rsv_ratio)[2] <- list(age_group=c("<1","1","2-4","5-9","10-19","20-44","45-64","65-84","85+"))
+
+# get a general idea of the mean and 95% CIs of the report ratio across age groups
+  round(apply(rsv_ratio,2, mean)*100,2)
+  round(apply(rsv_ratio, 2, quantile , probs = 0.025)*100,2)
+  round(apply(rsv_ratio,2, quantile , probs = 0.975)*100,2)
+  
+dimnames(rsv_ratio)[3] <- list(income_group=c("Low","Medium","High"))
+
+rsv_ratio <- as.data.frame.table(rsv_ratio)
+rsv_ratio <- rsv_ratio[,-1]
+names(rsv_ratio) <- c("age_group","income_group","RSVratio")
+
+long_rsv_ratio <- rsv_ratio %>%
+  group_by(age_group,income_group) %>%
+  summarise(RSV_ratio = mean(RSVratio, na.rm = TRUE)*100,
+            quan_0.025 = quantile(RSVratio, 0.025,na.rm = TRUE)*100,
+            quan_0.975 = quantile(RSVratio, 0.975,na.rm = TRUE)*100)
+
+long_rsv_ratio$RSV_ratio <- round(long_rsv_ratio$RSV_ratio)
+long_rsv_ratio$Age <- factor(long_rsv_ratio$age_group,level=c("85+", "65-84", "45-64","20-44","10-19" , "5-9" ,"2-4", "1","<1"  ))
+long_rsv_ratio$`Income group` <- factor(long_rsv_ratio$income_group,levels = c("Low","Medium","High"))
+names(long_rsv_ratio)[3] <- "Report ratio"
+
+jpeg(file = "/Users/zhezheng/Library/CloudStorage/Box-Box/aim2/draft/revision_pneu/F2_0823.jpeg",width=1600,height=1600,res=380)
+ggplot(data=long_rsv_ratio,aes(x=`Income group`, y=Age)) +
+    geom_point(aes(size=quan_0.975, color=`Income group`),shape=16,alpha=0.3) +
+  geom_point(aes(size = `Report ratio`,colour = `Income group`),shape = 1,stroke = 0.1) +
+  geom_point(aes(size=quan_0.025),fill="white",color="white") +
+  scale_color_manual(values = c( "#FC4E07","#00AFBB", "#E7B800","white"),name="Income Group") +
+    geom_text(aes(label=paste0(`Report ratio`,"%")), size=3, nudge_x=+0.45, nudge_y=0.00)+
+    guides(size = guide_legend(override.aes = list(shape=16),order=1),
+           fill = guide_legend(override.aes = list(shape=21,size=3),order=2))+
+    scale_size(range = c(0.05, 14), breaks = c(10,30,50), name="Recorded Ratio",labels = paste0(c(10,30,50),"%"))+
+    theme(axis.text.x = element_text(size = 8), axis.title.x = element_text(size = 10),
+          axis.text.y = element_text(size = 8), axis.title.y = element_text(size = 10),
+          legend.title = element_text(size=8),
+          legend.text = element_text(size = 8),
+          panel.background = element_blank())
+dev.off()
+```
+
+## Figure 3. stacked plot for children under one year old
+```{r}
+library(dplyr)
+library(tidyr)
+rsv_count_estimate <- array(data = NA,dim = c(3750,108))
+  for (i in 1:108) {
+    for (j in 1:3750) {
+        rsv_count_estimate[j,i] <- sum(rsv_count[j,i,1,])
+    }}
+rsv_count_estimate <- colMeans(rsv_count_estimate)
+rsv_count_estimate_plot <- data.frame(state=rep("Whole",108),type=rep("Estimates",108),date=rsv_urban$amonthdate,mean=rsv_count_estimate/(sum(age_number[1,]))*100000)
+
+infant.report <- bind_rows(NJresp.1[AGE<1,list(rsv=sum(rsv)),by="amonthdate"],NYresp.1[AGE<1,list(rsv=sum(rsv)),by="amonthdate"],WAresp.1[AGE<1,list(rsv=sum(rsv)),by="amonthdate"])
+infant.report <-aggregate(infant.report$rsv, by=list(amonthdate=infant.report$amonthdate), FUN=sum)
+infant.report <- infant.report[order(infant.report$amonthdate),]
+rsv_count_real_plot <- data.frame(state=rep("Whole",108),type=rep("Report",108),date=infant.report$amonthdate,mean=infant.report$x/(sum(age_number[1,]))*100000)
+
+infant.total <- bind_rows(NJresp.1[AGE<1,list(resp=sum(resp)),by="amonthdate"],NYresp.1[AGE<1,list(resp=sum(resp)),by="amonthdate"],WAresp.1[AGE<1,list(resp=sum(resp)),by="amonthdate"])
+infant.total <-aggregate(infant.total$resp, by=list(amonthdate=infant.total$amonthdate), FUN=sum)
+infant.total <- infant.total[order(infant.total$amonthdate),]
+rsv_count_total_plot <- data.frame(state=rep("Whole",108),type=rep("Total",108),date=infant.total$amonthdate,mean=infant.total$x/(sum(age_number[1,]))*100000)
+
+rsv_wide <- bind_rows(rsv_count_total_plot,rsv_count_estimate_plot,rsv_count_real_plot)
+rsv_wide <- spread(rsv_wide, type, mean)
+
+jpeg(file = "/Users/zhezheng/Library/CloudStorage/Box-Box/aim2/draft/revision_pneu/F3_0823.jpeg",width=2500,height=1200,res=300)
+ggplot(data=rsv_wide, aes(x=date)) +
+ geom_area(aes(y=Total,fill="Total")) +
+  geom_area(aes(y=Estimates,fill="Estimated RSV")) +
+    geom_area(aes(y=Report,fill="Recorded RSV"))+
+labs(y=" Hospitalizations per 100,000 children under One", x="Date")+
+  theme(axis.text.x = element_text(size = 8), axis.title.x = element_text(size = 10),
+        axis.text.y = element_text(size = 8), axis.title.y = element_text(size = 10),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size = 10),
+    panel.background = element_blank())+ 
+    scale_fill_manual(name="Respiratory\nHospitalizations",values=c("Total"="darkturquoise","Estimated RSV"="gold","Recorded RSV"="red"),breaks=c("Total",
+                           "Estimated RSV",
+                           "Recorded RSV"))
+dev.off()
+
+```
+
+## Figure 4. stacked plot for older adults over 65 years old
+
+```{r}
+# first run a zoom function to create the zoom in for figure 4
+library(ggplot)
+library(ggforce)
+library(grid)
+
+# define facet_zoom2 function to use FacetZoom2 instead of FacetZoom
+# (everything else is the same as facet_zoom)
+facet_zoom2 <- function(x, y, xy, zoom.data, xlim = NULL, ylim = NULL, 
+                        split = FALSE, horizontal = TRUE, zoom.size = 2, 
+                        show.area = TRUE, shrink = TRUE) {
+  x <- if (missing(x)) if (missing(xy)) NULL else lazyeval::lazy(xy) else lazyeval::lazy(x)
+  y <- if (missing(y)) if (missing(xy)) NULL else lazyeval::lazy(xy) else lazyeval::lazy(y)
+  zoom.data <- if (missing(zoom.data)) NULL else lazyeval::lazy(zoom.data)
+  if (is.null(x) && is.null(y) && is.null(xlim) && is.null(ylim)) {
+    stop("Either x- or y-zoom must be given", call. = FALSE)
+  }
+  if (!is.null(xlim)) x <- NULL
+  if (!is.null(ylim)) y <- NULL
+  ggproto(NULL, FacetZoom2,
+          shrink = shrink,
+          params = list(
+            x = x, y = y, xlim = xlim, ylim = ylim, split = split, zoom.data = zoom.data,
+            zoom.size = zoom.size, show.area = show.area,
+            horizontal = horizontal
+          )
+  )
+}
+```
+
+```{r}
+rsv_count_estimate <- array(data = NA,dim = c(3750,108))
+  for (i in 1:108) {
+    for (j in 1:3750) {
+        rsv_count_estimate[j,i] <- sum(rsv_count[j,i,c(8:9),])
+    }}
+
+rsv_count_estimate <- colMeans(rsv_count_estimate)
+rsv_count_estimate_plot_old <- data.frame(state=rep("Whole",108),type=rep("Estimates",108),date=rsv_urban$amonthdate,mean=rsv_count_estimate/( 4565877)*100000)
+
+report_old <- bind_rows(NJresp.1[65<=AGE,list(rsv=sum(rsv)),by="amonthdate"],NYresp.1[65<=AGE,list(rsv=sum(rsv)),by="amonthdate"],WAresp.1[65<=AGE,list(rsv=sum(rsv)),by="amonthdate"])
+report_old  <-aggregate(report_old $rsv, by=list(amonthdate=report_old$amonthdate), FUN=sum)
+report_old  <- report_old [order(report_old $amonthdate),]
+rsv_count_real_plot_old <- data.frame(state=rep("Whole",108),type=rep("Report",108),date=report_old $amonthdate,mean=report_old $x/( 4565877)*100000)
+
+total_old <- bind_rows(NJresp.1[65<=AGE,list(resp=sum(resp)),by="amonthdate"],NYresp.1[65<=AGE,list(resp=sum(resp)),by="amonthdate"],WAresp.1[65<=AGE,list(resp=sum(resp)),by="amonthdate"])
+total_old  <-aggregate(total_old$resp, by=list(amonthdate=total_old$amonthdate), FUN=sum)
+total_old  <- total_old [order(total_old$amonthdate),]
+rsv_count_total_plot_old <- data.frame(state=rep("Whole",108),type=rep("Total",108),date=total_old$amonthdate,mean=total_old$x/( 4565877)*100000)
+
+rsv_old <- bind_rows(rsv_count_total_plot_old,rsv_count_estimate_plot_old,rsv_count_real_plot_old)
+rsv_old <- spread(rsv_old, type, mean)
+
+##RSV respiratory hospitalizations in the elderly (65+) in New York
+jpeg(file = "/Users/zhezheng/Library/CloudStorage/Box-Box/aim2/draft/revision_pneu/F4_0823.jpeg",width=2500,height=1200,res=300)
+ggplot(data=rsv_old, aes(x=date)) +
+ geom_area(aes(y=Total,fill="Total")) +
+  geom_area(aes(y=Estimates,fill="Estimated RSV")) +
+    geom_area(aes(y=Report,fill="Recorded RSV"))+
+  labs(y="Hospitalizations per 100,000 people", x="Date")+
+  theme(axis.text.x = element_text(size = 8), axis.title.x = element_text(size = 10),
+        axis.text.y = element_text(size = 8), axis.title.y = element_text(size = 10),
+        legend.title = element_text(size=10),
+        legend.text = element_text(size = 10),
+    panel.background = element_blank(),
+     plot.title = element_text( face = "bold",hjust = 0.5))+ 
+    scale_fill_manual(name="Respiratory\nHospitalizations",values=c("Total"="darkturquoise","Estimated RSV"="gold","Recorded RSV"="red"),breaks=c("Total",
+                           "Estimated RSV",
+                           "Recorded RSV"))+
+  facet_zoom2(ylim = c(0,75))
+dev.off()
+```

@@ -1,0 +1,411 @@
+---
+title: "income"
+author: "ZHE ZHENG"
+date: "6/10/2021"
+output: html_document
+---
+## load required packages
+```{r}
+library(readr)
+```
+
+## access median income file and combine it with respiratory hospitalization dataset
+```{r}
+# read in median income file
+medianincome <- read_csv("~/Box/aim2/data/medianincome.csv", 
+     col_types = cols(DP03_0062E = col_number(), 
+        X4 = col_skip(), X5 = col_skip(), 
+         X6 = col_skip(), X7 = col_skip(), 
+         X8 = col_skip(), `zip code tabulation area` = col_character()))
+
+medianincome <- medianincome[medianincome$DP03_0062E>10000,] # get rid of 9999 and others codes which indicate income not known
+medianincome <- medianincome[complete.cases(medianincome$DP03_0062E),]# get rid of NA
+
+colnames(medianincome)[3] <- "zip" # change the column names for identification
+
+medianincome$zip <-formatC(as.integer(medianincome$zip),width = 5,flag = "0") # add 0 for zip codes which start with 0 (because csv file neglect the starting 0)
+
+quantile(medianincome$DP03_0062E[medianincome$zip%in%NJresp.1$zip|medianincome$zip%in%NYresp.1$zip|medianincome$zip%in%WAresp.1$zip],c(1/3,2/3)) # get income tertile of income
+
+# get rid of the cases that reside outside of the states
+NJresp.1 <- NJresp.1[NJresp.1$zip%in%njpop$zip,] 
+NYresp.1 <- NYresp.1[NYresp.1$zip%in%nypop$zip,]
+WAresp.1 <- WAresp.1[WAresp.1$zip%in%WAarea$zip,]
+```
+
+# seperate the patients based on the tertile of income in the location they reside
+```{r}
+library(data.table )
+NJincome <- merge(medianincome,NJresp.1,by.x="zip",by.y="zip")
+NJincome <- data.table(NJincome)
+NJincome <- NJincome[,list(resp = sum(resp),rsv=sum(rsv),bronchio=sum(bronchio),flu=sum(flu),pneusept=sum(pneumosept)), by = 'agecat1,amonthdate,DP03_0062E,zip']
+resp.group1 <- NJincome[NJincome$DP03_0062E<44447,]
+resp.group1 <- resp.group1[order(resp.group1$amonthdate),]
+resp.group2 <- NJincome[NJincome$DP03_0062E>=44447&NJincome$DP03_0062E<62005 ,]
+resp.group2 <- resp.group2[order(resp.group2$amonthdate),]
+resp.group3 <- NJincome[NJincome$DP03_0062E>=62005,]
+resp.group3 <- resp.group3[order(resp.group3$amonthdate),]
+
+resp.group_nj <- list()
+resp.group_nj <- list(resp.group1,resp.group2,resp.group3)
+```
+
+
+```{r}
+NYincome <- merge(medianincome,NYresp.1,by.x="zip",by.y="zip")
+NYincome <- data.table(NYincome)
+NYincome <- NYincome[,list(resp = sum(resp),rsv=sum(rsv),bronchio=sum(bronchio),flu=sum(flu),pneusept=sum(pneumosept)), by = 'agecat1,amonthdate,DP03_0062E,zip']
+resp.group1 <- NYincome[NYincome$DP03_0062E<44447,]
+resp.group1 <- resp.group1[order(resp.group1$amonthdate),]
+resp.group2 <- NYincome[NYincome$DP03_0062E>=44447&NYincome$DP03_0062E<62005 ,]
+resp.group2 <- resp.group2[order(resp.group2$amonthdate),]
+resp.group3 <- NYincome[NYincome$DP03_0062E>=62005 ,]
+resp.group3 <- resp.group3[order(resp.group3$amonthdate),]
+
+resp.group_ny <- list()
+resp.group_ny <- list(resp.group1,resp.group2,resp.group3)
+
+```
+
+```{r}
+WAincome <-   merge(medianincome,WAresp.1,by.x="zip",by.y="zip")
+WAincome <- data.table(WAincome)
+WAincome <- WAincome[,list(resp = sum(resp),rsv=sum(rsv),bronchio=sum(bronchio),flu=sum(flu),pneusept=sum(pneumosept)), by = 'agecat1,amonthdate,DP03_0062E,zip']
+resp.group1 <- WAincome[WAincome$DP03_0062E<44447,]
+resp.group1 <- resp.group1[order(resp.group1$amonthdate),]
+resp.group2 <- WAincome[WAincome$DP03_0062E>=44447&WAincome$DP03_0062E<62005,]
+resp.group2 <- resp.group2[order(resp.group2$amonthdate),]
+resp.group3 <- WAincome[WAincome$DP03_0062E>=62005,]
+resp.group3 <- resp.group3[order(resp.group3$amonthdate),]
+
+resp.group_wa <- list()
+resp.group_wa <- list(resp.group1,resp.group2,resp.group3)
+```
+
+# create the response variable array
+# the first dimension is respiratory hospitalizations by month
+# the second dimension is respiratory hospitalizations by age group
+# the third dimension is respiratory hospitalizations by income group
+# the forth dimension is respiratory hospitalizations by state
+```{r}
+y_income <- array(data=NA,dim = c(108,9,3,3))
+colnames(y) <- c("<1","1-<2","2-<5","5-9","10-19","20-44","45-64","65-84",">85")
+
+for (i in 1:3) {
+  
+rsv.infant <- resp.group_nj[[i]][agecat1==0,]
+rsv.infant <- rsv.infant[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.infant <- rsv.infant[order(amonthdate),]
+colnames(rsv.infant)[2] <- "infant"
+
+rsv.12to24month <- resp.group_nj[[i]][agecat1==1,]
+rsv.12to24month <- rsv.12to24month[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.12to24month <- rsv.12to24month[order(amonthdate),]
+colnames(rsv.12to24month)[2] <- "oney"
+
+rsv.25to60month <- resp.group_nj[[i]][1<agecat1&agecat1<5,]
+rsv.25to60month <- rsv.25to60month[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.25to60month <- rsv.25to60month[order(amonthdate),]
+colnames(rsv.25to60month)[2] <- "twoy"
+
+rsv.5to9 <- resp.group_nj[[i]][agecat1==5,]
+rsv.5to9 <- rsv.5to9[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.5to9 <-rsv.5to9[order(amonthdate),]
+colnames(rsv.5to9)[2] <- "Five"
+
+rsv.10to19 <- resp.group_nj[[i]][5<agecat1&agecat1<8,]
+rsv.10to19 <- rsv.10to19[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.10to19 <-rsv.10to19[order(amonthdate),]
+colnames(rsv.10to19)[2] <- "Ten"
+
+rsv.20to44 <- resp.group_nj[[i]][7<agecat1&agecat1<13,]
+rsv.20to44 <- rsv.20to44[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.20to44 <-rsv.20to44[order(amonthdate),]
+colnames(rsv.20to44)[2] <- "Twenty"
+
+rsv.45to64 <- resp.group_nj[[i]][12<agecat1&agecat1<17,]
+rsv.45to64 <- rsv.45to64[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.45to64 <-rsv.45to64[order(amonthdate),]
+colnames(rsv.45to64)[2] <- "Fourtyfive"
+
+rsv.65to79  <- resp.group_nj[[i]][17<=agecat1&agecat1<=20,]
+rsv.65to79  <- rsv.65to79 [,list(resp = sum(resp)),by = 'amonthdate']
+rsv.65to79  <- rsv.65to79 [order(amonthdate),]
+colnames(rsv.65to79)[2] <- "Sixtyfive"
+
+rsv.elderly <- resp.group_nj[[i]][21<=agecat1,]
+rsv.elderly <- rsv.elderly[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.elderly <-rsv.elderly[order(amonthdate),]
+colnames(rsv.elderly)[2] <- "Elderly"
+
+respcount <- merge(merge(merge(merge(merge(merge(merge(merge(merge(rsv_non,
+  rsv.infant,all=T),
+  rsv.12to24month, all = TRUE),
+  rsv.25to60month, all = TRUE),
+  rsv.5to9, all = TRUE),
+  rsv.10to19, all = TRUE),
+  rsv.20to44,all=T),
+  rsv.45to64,all=T),
+  rsv.65to79,all=T),
+  rsv.elderly,all=T)
+
+respcount[is.na(respcount)]=0
+respcount <- respcount[order(amonthdate),]
+
+
+y_income[,1,i,1] <- respcount$infant
+y_income[,2,i,1] <- respcount$oney
+y_income[,3,i,1] <- respcount$twoy
+y_income[,4,i,1] <- respcount$Five
+y_income[,5,i,1] <- respcount$Ten
+y_income[,6,i,1] <- respcount$Twenty
+y_income[,7,i,1] <- respcount$Fourtyfive
+y_income[,8,i,1] <- respcount$Sixtyfive
+y_income[,9,i,1] <- respcount$Elderly
+print(i)
+}
+
+for (i in 1:3) {
+  
+rsv.infant <- resp.group_ny[[i]][agecat1==0,]
+rsv.infant <- rsv.infant[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.infant <- rsv.infant[order(amonthdate),]
+colnames(rsv.infant)[2] <- "infant"
+
+rsv.12to24month <- resp.group_ny[[i]][agecat1==1,]
+rsv.12to24month <- rsv.12to24month[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.12to24month <- rsv.12to24month[order(amonthdate),]
+colnames(rsv.12to24month)[2] <- "oney"
+
+rsv.25to60month <- resp.group_ny[[i]][1<agecat1&agecat1<5,]
+rsv.25to60month <- rsv.25to60month[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.25to60month <- rsv.25to60month[order(amonthdate),]
+colnames(rsv.25to60month)[2] <- "twoy"
+
+rsv.5to9 <- resp.group_ny[[i]][agecat1==5,]
+rsv.5to9 <- rsv.5to9[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.5to9 <-rsv.5to9[order(amonthdate),]
+colnames(rsv.5to9)[2] <- "Five"
+
+rsv.10to19 <- resp.group_ny[[i]][5<agecat1&agecat1<8,]
+rsv.10to19 <- rsv.10to19[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.10to19 <-rsv.10to19[order(amonthdate),]
+colnames(rsv.10to19)[2] <- "Ten"
+
+rsv.20to44 <- resp.group_ny[[i]][7<agecat1&agecat1<13,]
+rsv.20to44 <- rsv.20to44[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.20to44 <-rsv.20to44[order(amonthdate),]
+colnames(rsv.20to44)[2] <- "Twenty"
+
+rsv.45to64 <- resp.group_ny[[i]][12<agecat1&agecat1<17,]
+rsv.45to64 <- rsv.45to64[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.45to64 <-rsv.45to64[order(amonthdate),]
+colnames(rsv.45to64)[2] <- "Fourtyfive"
+
+rsv.65to79  <- resp.group_ny[[i]][17<=agecat1&agecat1<=20,]
+rsv.65to79  <- rsv.65to79 [,list(resp = sum(resp)),by = 'amonthdate']
+rsv.65to79  <- rsv.65to79 [order(amonthdate),]
+colnames(rsv.65to79)[2] <- "Sixtyfive"
+
+rsv.elderly <- resp.group_ny[[i]][21<=agecat1,]
+rsv.elderly <- rsv.elderly[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.elderly <-rsv.elderly[order(amonthdate),]
+colnames(rsv.elderly)[2] <- "Elderly"
+
+respcount <- merge(merge(merge(merge(merge(merge(merge(merge(
+  rsv.infant,
+  rsv.12to24month, all = TRUE),
+  rsv.25to60month, all = TRUE),
+  rsv.5to9, all = TRUE),
+  rsv.10to19, all = TRUE),
+  rsv.20to44,all=T),
+  rsv.45to64,all=T),
+  rsv.65to79,all=T),
+  rsv.elderly,all=T) 
+
+respcount[is.na(respcount)]=0
+respcount <- respcount[order(amonthdate),]
+
+
+y_income[,1,i,2] <- respcount$infant
+y_income[,2,i,2] <- respcount$oney
+y_income[,3,i,2] <- respcount$twoy
+y_income[,4,i,2] <- respcount$Five
+y_income[,5,i,2] <- respcount$Ten
+y_income[,6,i,2] <- respcount$Twenty
+y_income[,7,i,2] <- respcount$Fourtyfive
+y_income[,8,i,2] <- respcount$Sixtyfive
+y_income[,9,i,2] <- respcount$Elderly
+print(i)
+}
+
+for (i in 1:3) {
+  
+rsv.infant <- resp.group_wa[[i]][agecat1==0,]
+rsv.infant <- rsv.infant[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.infant <- rsv.infant[order(amonthdate),]
+colnames(rsv.infant)[2] <- "infant"
+
+rsv.12to24month <- resp.group_wa[[i]][agecat1==1,]
+rsv.12to24month <- rsv.12to24month[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.12to24month <- rsv.12to24month[order(amonthdate),]
+colnames(rsv.12to24month)[2] <- "oney"
+
+rsv.25to60month <- resp.group_wa[[i]][1<agecat1&agecat1<5,]
+rsv.25to60month <- rsv.25to60month[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.25to60month <- rsv.25to60month[order(amonthdate),]
+colnames(rsv.25to60month)[2] <- "twoy"
+
+rsv.5to9 <- resp.group_wa[[i]][agecat1==5,]
+rsv.5to9 <- rsv.5to9[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.5to9 <-rsv.5to9[order(amonthdate),]
+colnames(rsv.5to9)[2] <- "Five"
+
+rsv.10to19 <- resp.group_wa[[i]][5<agecat1&agecat1<8,]
+rsv.10to19 <- rsv.10to19[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.10to19 <-rsv.10to19[order(amonthdate),]
+colnames(rsv.10to19)[2] <- "Ten"
+
+rsv.20to44 <- resp.group_wa[[i]][7<agecat1&agecat1<13,]
+rsv.20to44 <- rsv.20to44[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.20to44 <-rsv.20to44[order(amonthdate),]
+colnames(rsv.20to44)[2] <- "Twenty"
+
+rsv.45to64 <- resp.group_wa[[i]][12<agecat1&agecat1<17,]
+rsv.45to64 <- rsv.45to64[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.45to64 <-rsv.45to64[order(amonthdate),]
+colnames(rsv.45to64)[2] <- "Fourtyfive"
+
+rsv.65to79  <- resp.group_wa[[i]][17<=agecat1&agecat1<=20,]
+rsv.65to79  <- rsv.65to79 [,list(resp = sum(resp)),by = 'amonthdate']
+rsv.65to79  <- rsv.65to79 [order(amonthdate),]
+colnames(rsv.65to79)[2] <- "Sixtyfive"
+
+rsv.elderly <- resp.group_wa[[i]][21<=agecat1,]
+rsv.elderly <- rsv.elderly[,list(resp = sum(resp)),by = 'amonthdate']
+rsv.elderly <-rsv.elderly[order(amonthdate),]
+colnames(rsv.elderly)[2] <- "Elderly"
+
+respcount <- merge(merge(merge(merge(merge(merge(merge(merge(
+  rsv.infant,
+  rsv.12to24month, all = TRUE),
+  rsv.25to60month, all = TRUE),
+  rsv.5to9, all = TRUE),
+  rsv.10to19, all = TRUE),
+  rsv.20to44,all=T),
+  rsv.45to64,all=T),
+  rsv.65to79,all=T),
+  rsv.elderly,all=T) 
+
+respcount[is.na(respcount)]=0
+respcount <- respcount[order(amonthdate),]
+
+
+y_income[,1,i,3] <- respcount$infant
+y_income[,2,i,3] <- respcount$oney
+y_income[,3,i,3] <- respcount$twoy
+y_income[,4,i,3] <- respcount$Five
+y_income[,5,i,3] <- respcount$Ten
+y_income[,6,i,3] <- respcount$Twenty
+y_income[,7,i,3] <- respcount$Fourtyfive
+y_income[,8,i,3] <- respcount$Sixtyfive
+y_income[,9,i,3] <- respcount$Elderly
+print(i)
+}
+
+```
+
+# create the input variable array
+
+## RSV
+## the first dimension is RSV hospitalizations in children under 2 years old by month
+## the second dimension will be the same because we use RSV hospitalizations in children under 2 years old for all age group as indicator
+## the third dimension is RSV hospitalizations in children under 2 years old by income group
+## the forth dimension is RSV hospitalizations in children under 2 years old by state
+
+```{r}
+rsv_low_nj <- resp.group_nj[[1]][agecat1<=1,]
+rsv_low_nj <-  rsv_low_nj[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_low_nj <- rsv_low_nj[order(amonthdate),]
+
+rsv_mid_nj <- resp.group_nj[[2]][agecat1<=1,]
+rsv_mid_nj <-  rsv_mid_nj[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_mid_nj <- rsv_mid_nj[order(amonthdate),]
+
+rsv_high_nj <- resp.group_nj[[3]][agecat1<=1,]
+rsv_high_nj <-  rsv_high_nj[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_high_nj <- rsv_high_nj[order(amonthdate),]
+
+rsv_low_ny <- resp.group_ny[[1]][agecat1<=1,]
+rsv_low_ny <-  rsv_low_ny[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_low_ny <- rsv_low_ny[order(amonthdate),]
+
+rsv_mid_ny <- resp.group_ny[[2]][agecat1<=1,]
+rsv_mid_ny <-  rsv_mid_ny[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_mid_ny <- rsv_mid_ny[order(amonthdate),]
+
+rsv_high_ny <- resp.group_ny[[3]][agecat1<=1,]
+rsv_high_ny <-  rsv_high_ny[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_high_ny <- rsv_high_ny[order(amonthdate),]
+
+
+rsv_low_wa <- resp.group_wa[[1]][agecat1<=1,]
+rsv_low_wa <-  rsv_low_wa[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_low_wa <- rsv_low_wa[order(amonthdate),]
+
+rsv_mid_wa <- resp.group_wa[[2]][agecat1<=1,]
+rsv_mid_wa <-  rsv_mid_wa[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_mid_wa <- rsv_mid_wa[order(amonthdate),]
+
+rsv_high_wa <- resp.group_wa[[3]][agecat1<=1,]
+rsv_high_wa <-  rsv_high_wa[,list(rsv=sum(rsv)), by = 'amonthdate']
+rsv_high_wa <- rsv_high_wa[order(amonthdate),]
+
+rsv_income <- array(data =c(c(rep(rsv_low_nj$rsv,9),rep(rsv_mid_nj$rsv,9),rep(rsv_high_nj$rsv,9)),c(rep(rsv_low_ny$rsv,9),rep(rsv_mid_ny$rsv,9),rep(rsv_high_ny$rsv,9)),c(rep(rsv_low_wa$rsv,9),rep(rsv_mid_wa$rsv,9),rep(rsv_high_wa$rsv,9))),dim = c(108,9,3,3))
+```
+
+## Flu
+## the first dimension is flu hospitalizations in entire population by month
+## the second dimension will be the same because we use flu hospitalizations in entire population for all age group as indicator
+## the third dimension is flu hospitalizations in entire population by income group
+## the forth dimension is flu hospitalizations in entire population by state
+
+```{r}
+flu_low_nj <- resp.group_nj[[1]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_low_nj <- flu_low_nj[order(amonthdate),]
+
+flu_mid_nj <- resp.group_nj[[2]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_mid_nj <- flu_mid_nj[order(amonthdate),]
+
+flu_high_nj <- resp.group_nj[[3]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_high_nj <- flu_high_nj[order(amonthdate),]
+
+flu_low_ny <- resp.group_ny[[1]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_low_ny <- flu_low_ny[order(amonthdate),]
+
+flu_mid_ny <- resp.group_ny[[2]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_mid_ny <- flu_mid_ny[order(amonthdate),]
+
+flu_high_ny <- resp.group_ny[[3]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_high_ny <- flu_high_ny[order(amonthdate),]
+
+
+flu_low_wa <- resp.group_wa[[1]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_low_wa <- flu_low_wa[order(amonthdate),]
+
+flu_mid_wa <- resp.group_wa[[2]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_mid_wa <- flu_mid_wa[order(amonthdate),]
+
+flu_high_wa <- resp.group_wa[[3]][,list(flu=sum(flu)), by = 'amonthdate']
+flu_high_wa <- flu_high_wa[order(amonthdate),]
+
+flu_income <- array(data =c(c(rep(flu_low_nj$flu,9),rep(flu_mid_nj$flu,9),rep(flu_high_nj$flu,9)),c(rep(flu_low_ny$flu,9),rep(flu_mid_ny$flu,9),rep(flu_high_ny$flu,9)),c(rep(flu_low_wa$flu,9),rep(flu_mid_wa$flu,9),rep(flu_high_wa$flu,9))),dim = c(108,9,3,3))
+
+```
+
+# this creates a array that neglect the state difference
+```{r}
+y_income_whole <- rowSums(y_income,dims = 3)
+rsv_income_whole <- rowSums(rsv_income,dims = 3)
+flu_income_whole <- rowSums(flu_income,dims = 3)
+```
